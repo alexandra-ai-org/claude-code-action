@@ -157,7 +157,7 @@ function parseClaudeArgsToExtraArgs(
       const nextArg = args[i + 1];
 
       // Check if next arg is a value (not another flag)
-      if (nextArg && !nextArg.startsWith("--")) {
+      if (nextArg !== undefined && !nextArg.startsWith("--")) {
         // For accumulating flags, consume all consecutive non-flag values
         // This handles: --allowed-tools "Tool1" "Tool2" "Tool3"
         if (ACCUMULATING_FLAGS.has(flag)) {
@@ -311,6 +311,20 @@ export function parseSdkOptions(options: ClaudeOptions): ParsedSdkOptions {
     };
   }
 
+  // An explicitly supplied source list must never silently become defaults.
+  if (Object.hasOwn(extraArgs, "setting-sources")) {
+    const sources = extraArgs["setting-sources"];
+    if (
+      typeof sources !== "string" ||
+      (sources !== "" &&
+        sources
+          .split(",")
+          .some((source) => !["user", "project", "local"].includes(source)))
+    ) {
+      throw new Error("Invalid explicit setting-sources value");
+    }
+  }
+
   // Build SDK options - use merged tools from both direct options and claudeArgs
   const sdkOptions: SdkOptions = {
     // Direct options from ClaudeOptions inputs
@@ -337,10 +351,12 @@ export function parseSdkOptions(options: ClaudeOptions): ParsedSdkOptions {
 
     // Load settings from sources - prefer user's --setting-sources if provided, otherwise use all sources
     // This ensures users can override the default behavior (e.g., --setting-sources user to avoid in-repo configs)
-    settingSources: extraArgs["setting-sources"]
-      ? (extraArgs["setting-sources"].split(
-          ",",
-        ) as SdkOptions["settingSources"])
+    settingSources: Object.hasOwn(extraArgs, "setting-sources")
+      ? extraArgs["setting-sources"] === ""
+        ? []
+        : (extraArgs["setting-sources"]!.split(
+            ",",
+          ) as SdkOptions["settingSources"])
       : ["user", "project", "local"],
   };
 
